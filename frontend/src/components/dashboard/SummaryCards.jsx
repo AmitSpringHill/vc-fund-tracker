@@ -21,7 +21,7 @@ function SummaryCards() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-        <p className="text-sm text-gray-600 mb-1">Total Investment</p>
+        <p className="text-sm text-gray-600 mb-1">Total Cost</p>
         <p className="text-2xl font-bold text-gray-900">{formatCurrencyShort(totalCost)}</p>
       </div>
 
@@ -34,7 +34,7 @@ function SummaryCards() {
       </div>
 
       <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-        <p className="text-sm text-gray-600 mb-1">Average Multiple</p>
+        <p className="text-sm text-gray-600 mb-1">Multiple (Value/Cost)</p>
         <p className="text-2xl font-bold text-blue-600">{formatMultiple(avgMultiple)}</p>
       </div>
 

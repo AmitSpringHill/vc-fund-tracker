@@ -113,6 +113,23 @@ export function AppProvider({ children }) {
     }
   }
 
+  async function deleteQuarter(id) {
+    try {
+      await quarterAPI.delete(id);
+      if (selectedFund) {
+        await loadQuarters(selectedFund.id);
+      }
+      if (selectedQuarter?.id === id) {
+        setSelectedQuarter(null);
+      }
+      toast.success('Quarter deleted successfully');
+    } catch (error) {
+      console.error('Error deleting quarter:', error);
+      toast.error('Failed to delete quarter');
+      throw error;
+    }
+  }
+
   async function deleteInvestment(id) {
     try {
       await investmentAPI.delete(id);
@@ -169,6 +186,7 @@ export function AppProvider({ children }) {
     loadInvestments,
     createFund,
     deleteFund,
+    deleteQuarter,
     deleteInvestment,
     updateInvestment,
     saveBulkInvestments,
