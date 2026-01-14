@@ -56,6 +56,12 @@ function PDFUpload({ onClose }) {
               })),
               pdfPath: response.data.pdfPath,
               pdfFilename: response.data.pdfFilename,
+              expenseData: response.data.expenseData || {
+                capital_commitments: 0,
+                management_fees: 0,
+                operating_costs: 0,
+                formation_costs: 0
+              },
             });
           }
         } catch (error) {
@@ -109,6 +115,10 @@ function PDFUpload({ onClose }) {
             pdf_path: report.pdfPath,
             pdf_filename: report.pdfFilename,
             create_fund: !existingFund,
+            capital_commitments: report.expenseData.capital_commitments,
+            management_fees: report.expenseData.management_fees,
+            operating_costs: report.expenseData.operating_costs,
+            formation_costs: report.expenseData.formation_costs,
           };
 
           const response = await uploadAPI.confirmUpload(confirmData);

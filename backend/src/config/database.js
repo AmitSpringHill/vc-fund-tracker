@@ -41,6 +41,10 @@ function initializeDatabase() {
       quarter_date TEXT NOT NULL,
       pdf_filename TEXT,
       pdf_path TEXT,
+      capital_commitments REAL DEFAULT 0,
+      management_fees REAL DEFAULT 0,
+      operating_costs REAL DEFAULT 0,
+      formation_costs REAL DEFAULT 0,
       uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (fund_id) REFERENCES funds(id) ON DELETE CASCADE,
       UNIQUE(fund_id, year, quarter)
@@ -94,6 +98,32 @@ function initializeDatabase() {
   `;
 
   db.exec(schema);
+
+  // Add migration for existing databases - add new expense tracking columns if they don't exist
+  try {
+    const tableInfo = db.pragma('table_info(quarters)');
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('capital_commitments')) {
+      db.exec('ALTER TABLE quarters ADD COLUMN capital_commitments REAL DEFAULT 0');
+      console.log('Added capital_commitments column to quarters table');
+    }
+    if (!columnNames.includes('management_fees')) {
+      db.exec('ALTER TABLE quarters ADD COLUMN management_fees REAL DEFAULT 0');
+      console.log('Added management_fees column to quarters table');
+    }
+    if (!columnNames.includes('operating_costs')) {
+      db.exec('ALTER TABLE quarters ADD COLUMN operating_costs REAL DEFAULT 0');
+      console.log('Added operating_costs column to quarters table');
+    }
+    if (!columnNames.includes('formation_costs')) {
+      db.exec('ALTER TABLE quarters ADD COLUMN formation_costs REAL DEFAULT 0');
+      console.log('Added formation_costs column to quarters table');
+    }
+  } catch (error) {
+    console.error('Error running migrations:', error);
+  }
+
   console.log('Database initialized successfully');
 }
 

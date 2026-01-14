@@ -59,6 +59,12 @@ async function analyzePDF(req, res, next) {
         quarter: aiResult.quarter,
         detected: !!(aiResult.fundName && aiResult.year && aiResult.quarter)
       },
+      expenseData: {
+        capital_commitments: aiResult.capital_commitments || 0,
+        management_fees: aiResult.management_fees || 0,
+        operating_costs: aiResult.operating_costs || 0,
+        formation_costs: aiResult.formation_costs || 0
+      },
       extractedInvestments: aiResult.investments,
       extractionSuccess: aiResult.success,
       investmentCount: aiResult.count,
@@ -75,7 +81,19 @@ async function analyzePDF(req, res, next) {
 
 async function uploadPDF(req, res, next) {
   try {
-    const { fund_id, fund_name, year, quarter, pdf_path, pdf_filename, create_fund } = req.body;
+    const {
+      fund_id,
+      fund_name,
+      year,
+      quarter,
+      pdf_path,
+      pdf_filename,
+      create_fund,
+      capital_commitments,
+      management_fees,
+      operating_costs,
+      formation_costs
+    } = req.body;
 
     if (!year || !quarter) {
       return res.status(400).json({
@@ -127,7 +145,14 @@ async function uploadPDF(req, res, next) {
 
     const quarterDate = getQuarterEndDate(yearNum, quarterNum);
 
-    const newQuarter = Quarter.create(fundId, yearNum, quarterNum, quarterDate, pdf_filename, pdf_path);
+    const expenseData = {
+      capital_commitments: parseFloat(capital_commitments) || 0,
+      management_fees: parseFloat(management_fees) || 0,
+      operating_costs: parseFloat(operating_costs) || 0,
+      formation_costs: parseFloat(formation_costs) || 0
+    };
+
+    const newQuarter = Quarter.create(fundId, yearNum, quarterNum, quarterDate, pdf_filename, pdf_path, expenseData);
 
     res.status(200).json({
       success: true,

@@ -44,6 +44,7 @@ export const analyticsAPI = {
   getFundTimeline: (fundId) => api.get(`/analytics/fund-timeline/${fundId}`),
   getPortfolioComposition: (quarterId) => api.get(`/analytics/portfolio-composition/${quarterId}`),
   getInvestmentComparison: (quarterId) => api.get(`/analytics/investment-comparison/${quarterId}`),
+  getExpenseAverages: () => api.get('/analytics/expense-averages'),
 };
 
 export const uploadAPI = {

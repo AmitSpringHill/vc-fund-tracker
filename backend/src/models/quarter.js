@@ -26,12 +26,19 @@ class Quarter {
     return stmt.get(id);
   }
 
-  static create(fundId, year, quarter, quarterDate, pdfFilename = null, pdfPath = null) {
+  static create(fundId, year, quarter, quarterDate, pdfFilename = null, pdfPath = null, expenseData = {}) {
+    const {
+      capital_commitments = 0,
+      management_fees = 0,
+      operating_costs = 0,
+      formation_costs = 0
+    } = expenseData;
+
     const stmt = db.prepare(`
-      INSERT INTO quarters (fund_id, year, quarter, quarter_date, pdf_filename, pdf_path)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO quarters (fund_id, year, quarter, quarter_date, pdf_filename, pdf_path, capital_commitments, management_fees, operating_costs, formation_costs)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(fundId, year, quarter, quarterDate, pdfFilename, pdfPath);
+    const result = stmt.run(fundId, year, quarter, quarterDate, pdfFilename, pdfPath, capital_commitments, management_fees, operating_costs, formation_costs);
     return this.getById(result.lastInsertRowid);
   }
 

@@ -187,6 +187,36 @@ async function getAnalyticsInvestmentComparison(req, res, next) {
   }
 }
 
+async function getExpenseAverages(req, res, next) {
+  try {
+    const db = require('../config/database');
+
+    // Calculate average expense percentages across all quarters with capital commitments > 0
+    const stmt = db.prepare(`
+      SELECT
+        AVG(CASE WHEN capital_commitments > 0 THEN (management_fees * 100.0 / capital_commitments) ELSE 0 END) as avg_management_fees_pct,
+        AVG(CASE WHEN capital_commitments > 0 THEN (operating_costs * 100.0 / capital_commitments) ELSE 0 END) as avg_operating_costs_pct,
+        AVG(CASE WHEN capital_commitments > 0 THEN (formation_costs * 100.0 / capital_commitments) ELSE 0 END) as avg_formation_costs_pct,
+        COUNT(*) as total_quarters
+      FROM quarters
+      WHERE capital_commitments > 0
+    `);
+
+    const averages = stmt.get();
+    res.json({
+      success: true,
+      data: {
+        avg_management_fees_pct: averages.avg_management_fees_pct || 0,
+        avg_operating_costs_pct: averages.avg_operating_costs_pct || 0,
+        avg_formation_costs_pct: averages.avg_formation_costs_pct || 0,
+        total_quarters: averages.total_quarters || 0
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getAllInvestments,
   getInvestmentById,
@@ -197,5 +227,6 @@ module.exports = {
   getCompanyHistory,
   getAnalyticsFundTimeline,
   getAnalyticsPortfolioComposition,
-  getAnalyticsInvestmentComparison
+  getAnalyticsInvestmentComparison,
+  getExpenseAverages
 };

@@ -78,16 +78,62 @@ function InvestmentTable() {
     return sortDirection === 'asc' ? ' ▲' : ' ▼';
   };
 
+  const handleExportToExcel = () => {
+    // Prepare CSV data
+    const headers = ['Company Name', 'Investment Date', 'Cost', 'Current Value', 'Multiple'];
+    const rows = sortedInvestments.map(inv => [
+      inv.company_name,
+      inv.investment_date || 'N/A',
+      inv.cost,
+      inv.current_value,
+      inv.multiple || (inv.cost > 0 ? inv.current_value / inv.cost : 0)
+    ]);
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        // Handle cells that might contain commas or quotes
+        if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"'))) {
+          return `"${cell.replace(/"/g, '""')}"`;
+        }
+        return cell;
+      }).join(','))
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `investments_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div>
-      <div className="mb-4">
+      <div className="mb-4 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <input
           type="text"
           placeholder="Search by company name..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-64 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full sm:w-64 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        <button
+          onClick={handleExportToExcel}
+          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Export to Excel
+        </button>
       </div>
 
       <div className="overflow-x-auto">
