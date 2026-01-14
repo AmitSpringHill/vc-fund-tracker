@@ -75,6 +75,7 @@ function initializeDatabase() {
     CREATE VIEW IF NOT EXISTS investment_details AS
     SELECT
       i.id,
+      i.quarter_id,
       i.company_name,
       i.investment_date,
       i.cost,
