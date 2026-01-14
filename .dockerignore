@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+*.db
+*.db-shm
+*.db-wal
+uploads/*
+!uploads/.gitkeep
+.git
+.gitignore
+README.md
+DEPLOYMENT.md
+frontend/
