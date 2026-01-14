@@ -6,14 +6,30 @@ const dbPath = path.join(__dirname, '../../database/vc_tracker.db');
 
 // Check if RESET_DB environment variable is set
 if (process.env.RESET_DB === 'true') {
-  console.log('RESET_DB is true - deleting existing database...');
+  console.log('RESET_DB is true - deleting existing database and uploads...');
   try {
+    // Delete database files
     if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
     if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm');
     if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal');
     console.log('Database files deleted successfully');
+
+    // Delete all uploaded PDF files
+    const uploadsPath = path.join(__dirname, '../../uploads');
+    if (fs.existsSync(uploadsPath)) {
+      const files = fs.readdirSync(uploadsPath);
+      let deletedCount = 0;
+      files.forEach(file => {
+        if (file !== '.gitkeep') {
+          const filePath = path.join(uploadsPath, file);
+          fs.unlinkSync(filePath);
+          deletedCount++;
+        }
+      });
+      console.log(`Deleted ${deletedCount} uploaded file(s)`);
+    }
   } catch (error) {
-    console.error('Error deleting database files:', error);
+    console.error('Error deleting files:', error);
   }
 }
 
