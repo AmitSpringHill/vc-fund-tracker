@@ -1,7 +1,22 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
 const dbPath = path.join(__dirname, '../../database/vc_tracker.db');
+
+// Check if RESET_DB environment variable is set
+if (process.env.RESET_DB === 'true') {
+  console.log('RESET_DB is true - deleting existing database...');
+  try {
+    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm');
+    if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal');
+    console.log('Database files deleted successfully');
+  } catch (error) {
+    console.error('Error deleting database files:', error);
+  }
+}
+
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
