@@ -11,10 +11,11 @@ function Header() {
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-4">
               <div className="flex items-center">
-                <svg className="h-8 w-8 text-gray-600" viewBox="0 0 40 40" fill="currentColor">
-                  <path d="M20 5L30 12V28L20 35L10 28V12L20 5Z" />
-                  <path d="M20 15L25 18V25L20 28L15 25V18L20 15Z" opacity="0.6" />
-                </svg>
+                <img
+                  src="https://media.licdn.com/dms/image/v2/D4D0BAQE33UHJupkjqQ/company-logo_200_200/B4DZntbUnAKQAI-/0/1760624987734/springhill_venture_partners_logo?e=2147483647&v=beta&t=ILvm6ssM-8LhDfS6Jd1g76Zbpu0GporhDg6f4pwo7mM"
+                  alt="SpringHill Venture Partners"
+                  className="h-12 w-12"
+                />
                 <div className="ml-3">
                   <div className="text-xl font-bold text-gray-900 tracking-tight">
                     SPRINGHILL
