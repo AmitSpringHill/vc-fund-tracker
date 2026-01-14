@@ -6,21 +6,17 @@ import toast from 'react-hot-toast';
 
 function PDFUpload({ onClose }) {
   const { funds, loadFunds, saveBulkInvestments, loadQuarters, setSelectedQuarter, setSelectedFund } = useAppContext();
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
-  const [analyzedData, setAnalyzedData] = useState(null);
-  const [fundName, setFundName] = useState('');
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [quarter, setQuarter] = useState(1);
-  const [editableInvestments, setEditableInvestments] = useState([]);
-  const [step, setStep] = useState(1); // 1: Upload, 2: Review metadata and investments
+  const [analyzedReports, setAnalyzedReports] = useState([]); // Array of { file, fundName, year, quarter, investments, pdfPath, pdfFilename }
+  const [step, setStep] = useState(1); // 1: Upload, 2: Review all reports
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'application/pdf': ['.pdf'] },
-    maxFiles: 1,
+    multiple: true,
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
-        setFile(acceptedFiles[0]);
+        setFiles(acceptedFiles);
       }
     },
   });
@@ -28,112 +24,172 @@ function PDFUpload({ onClose }) {
   const handleAnalyze = async (e) => {
     e.preventDefault();
 
-    if (!file) {
-      toast.error('Please select a PDF file');
+    if (files.length === 0) {
+      toast.error('Please select at least one PDF file');
       return;
     }
 
     try {
       setAnalyzing(true);
+      const results = [];
 
-      const formData = new FormData();
-      formData.append('file', file);
+      // Process each file sequentially
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        toast.loading(`Analyzing ${file.name} (${i + 1}/${files.length})...`, { id: 'analyzing' });
 
-      const response = await uploadAPI.analyzePDF(formData);
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
 
-      if (response.data.success) {
-        setAnalyzedData(response.data);
+          const response = await uploadAPI.analyzePDF(formData);
 
-        // Set detected metadata
-        if (response.data.detectedMetadata.fundName) {
-          setFundName(response.data.detectedMetadata.fundName);
+          if (response.data.success) {
+            results.push({
+              file: file,
+              fundName: response.data.detectedMetadata.fundName || '',
+              year: response.data.detectedMetadata.year || new Date().getFullYear(),
+              quarter: response.data.detectedMetadata.quarter || 1,
+              investments: response.data.extractedInvestments.map((inv, idx) => ({
+                ...inv,
+                tempId: `${i}-${idx}`,
+              })),
+              pdfPath: response.data.pdfPath,
+              pdfFilename: response.data.pdfFilename,
+            });
+          }
+        } catch (error) {
+          console.error(`Error analyzing ${file.name}:`, error);
+          toast.error(`Failed to analyze ${file.name}`);
         }
-        if (response.data.detectedMetadata.year) {
-          setYear(response.data.detectedMetadata.year);
-        }
-        if (response.data.detectedMetadata.quarter) {
-          setQuarter(response.data.detectedMetadata.quarter);
-        }
+      }
 
-        // Set investments
-        setEditableInvestments(
-          response.data.extractedInvestments.map((inv, idx) => ({
-            ...inv,
-            tempId: idx,
-          }))
-        );
+      toast.dismiss('analyzing');
 
+      if (results.length > 0) {
+        setAnalyzedReports(results);
         setStep(2);
-        toast.success(response.data.message);
+        toast.success(`Successfully analyzed ${results.length} report(s)`);
+      } else {
+        toast.error('Failed to analyze any reports');
       }
     } catch (error) {
       console.error('Analysis error:', error);
-      toast.error(error.response?.data?.error || 'Failed to analyze PDF');
+      toast.error('Failed to analyze PDFs');
     } finally {
       setAnalyzing(false);
     }
   };
 
   const handleConfirmAndSave = async () => {
-    if (!fundName || !year || !quarter) {
-      toast.error('Please fill in fund name, year, and quarter');
-      return;
-    }
-
     try {
-      const existingFund = funds.find(f => f.name.toLowerCase() === fundName.toLowerCase());
+      let successCount = 0;
+      let failCount = 0;
 
-      const confirmData = {
-        fund_id: existingFund?.id,
-        fund_name: fundName,
-        year: year,
-        quarter: quarter,
-        pdf_path: analyzedData.pdfPath,
-        pdf_filename: analyzedData.pdfFilename,
-        create_fund: !existingFund,
-      };
+      // Process each report
+      for (let i = 0; i < analyzedReports.length; i++) {
+        const report = analyzedReports[i];
 
-      const response = await uploadAPI.confirmUpload(confirmData);
-
-      if (response.data.success) {
-        const quarterId = response.data.quarter.id;
-
-        // Save investments if any
-        if (editableInvestments.length > 0) {
-          const investmentsToSave = editableInvestments.map(({ tempId, ...inv }) => inv);
-          await saveBulkInvestments(quarterId, investmentsToSave);
-        } else {
-          toast.success('Quarter created successfully');
+        if (!report.fundName || !report.year || !report.quarter) {
+          toast.error(`Skipping ${report.file.name}: Missing fund name, year, or quarter`);
+          failCount++;
+          continue;
         }
 
-        // Reload funds and set selection
-        await loadFunds();
-        const fund = funds.find(f => f.id === response.data.fundId) ||
-                     (await loadFunds(), funds.find(f => f.id === response.data.fundId));
+        toast.loading(`Saving ${report.file.name} (${i + 1}/${analyzedReports.length})...`, { id: 'saving' });
 
-        if (fund) {
-          setSelectedFund(fund);
-          await loadQuarters(fund.id);
+        try {
+          const existingFund = funds.find(f => f.name.toLowerCase() === report.fundName.toLowerCase());
+
+          const confirmData = {
+            fund_id: existingFund?.id,
+            fund_name: report.fundName,
+            year: report.year,
+            quarter: report.quarter,
+            pdf_path: report.pdfPath,
+            pdf_filename: report.pdfFilename,
+            create_fund: !existingFund,
+          };
+
+          const response = await uploadAPI.confirmUpload(confirmData);
+
+          if (response.data.success) {
+            const quarterId = response.data.quarter.id;
+
+            // Save investments if any
+            if (report.investments.length > 0) {
+              const investmentsToSave = report.investments.map(({ tempId, ...inv }) => inv);
+              await saveBulkInvestments(quarterId, investmentsToSave);
+            }
+
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`Error saving ${report.file.name}:`, error);
+          toast.error(`Failed to save ${report.file.name}: ${error.response?.data?.error || error.message}`);
+          failCount++;
         }
+      }
 
+      toast.dismiss('saving');
+
+      // Reload funds
+      await loadFunds();
+
+      if (successCount > 0) {
+        toast.success(`Successfully saved ${successCount} report(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
         onClose();
+      } else {
+        toast.error('Failed to save any reports');
       }
     } catch (error) {
       console.error('Save error:', error);
-      toast.error(error.response?.data?.error || 'Failed to save data');
+      toast.error('Failed to save reports');
     }
   };
 
-  const handleUpdateInvestment = (tempId, field, value) => {
-    setEditableInvestments(prev =>
-      prev.map(inv =>
-        inv.tempId === tempId ? { ...inv, [field]: value } : inv
+  const handleUpdateReport = (reportIndex, field, value) => {
+    setAnalyzedReports(prev =>
+      prev.map((report, idx) =>
+        idx === reportIndex ? { ...report, [field]: value } : report
       )
     );
   };
 
-  const handleRemoveInvestment = (tempId) => {
-    setEditableInvestments(prev => prev.filter(inv => inv.tempId !== tempId));
+  const handleUpdateInvestment = (reportIndex, tempId, field, value) => {
+    setAnalyzedReports(prev =>
+      prev.map((report, idx) =>
+        idx === reportIndex
+          ? {
+              ...report,
+              investments: report.investments.map(inv =>
+                inv.tempId === tempId ? { ...inv, [field]: value } : inv
+              ),
+            }
+          : report
+      )
+    );
+  };
+
+  const handleRemoveInvestment = (reportIndex, tempId) => {
+    setAnalyzedReports(prev =>
+      prev.map((report, idx) =>
+        idx === reportIndex
+          ? {
+              ...report,
+              investments: report.investments.filter(inv => inv.tempId !== tempId),
+            }
+          : report
+      )
+    );
+  };
+
+  const handleRemoveReport = (reportIndex) => {
+    setAnalyzedReports(prev => prev.filter((_, idx) => idx !== reportIndex));
+    if (analyzedReports.length === 1) {
+      setStep(1);
+      setFiles([]);
+    }
   };
 
   return (
@@ -158,7 +214,7 @@ function PDFUpload({ onClose }) {
             <form onSubmit={handleAnalyze}>
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select PDF File *
+                  Select PDF Files *
                 </label>
                 <div
                   {...getRootProps()}
@@ -167,9 +223,14 @@ function PDFUpload({ onClose }) {
                   }`}
                 >
                   <input {...getInputProps()} />
-                  {file ? (
+                  {files.length > 0 ? (
                     <div>
-                      <p className="text-green-600 font-medium">{file.name}</p>
+                      <p className="text-green-600 font-medium">{files.length} file(s) selected</p>
+                      <div className="mt-2 text-sm text-gray-600 max-h-32 overflow-y-auto">
+                        {files.map((f, idx) => (
+                          <div key={idx}>{f.name}</div>
+                        ))}
+                      </div>
                       <p className="text-sm text-gray-500 mt-1">
                         Click or drag to replace
                       </p>
@@ -190,10 +251,10 @@ function PDFUpload({ onClose }) {
                         />
                       </svg>
                       <p className="mt-2 text-sm text-gray-600">
-                        {isDragActive ? 'Drop the PDF here' : 'Drag and drop a PDF here, or click to select'}
+                        {isDragActive ? 'Drop the PDFs here' : 'Drag and drop PDFs here, or click to select'}
                       </p>
                       <p className="mt-1 text-xs text-gray-500">
-                        The system will automatically detect fund name and quarter from the PDF
+                        You can upload multiple reports at once. The system will automatically detect fund name and quarter from each PDF.
                       </p>
                     </div>
                   )}
@@ -210,161 +271,158 @@ function PDFUpload({ onClose }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={analyzing || !file}
+                  disabled={analyzing || files.length === 0}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {analyzing ? 'Analyzing...' : 'Analyze PDF'}
+                  {analyzing ? 'Analyzing...' : `Analyze ${files.length} PDF(s)`}
                 </button>
               </div>
             </form>
           ) : (
             <div>
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-                <p className="text-blue-800 font-medium">PDF analyzed successfully!</p>
+                <p className="text-blue-800 font-medium">{analyzedReports.length} report(s) analyzed successfully!</p>
                 <p className="text-blue-700 text-sm mt-1">
-                  {analyzedData?.detectedMetadata?.detected
-                    ? 'Fund name and quarter were automatically detected. Please review and confirm.'
-                    : 'Could not auto-detect all information. Please enter manually.'}
+                  Please review and confirm the extracted data below.
                 </p>
               </div>
 
-              <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-md">
-                <h3 className="font-semibold mb-3">Fund & Quarter Information</h3>
+              {analyzedReports.map((report, reportIdx) => (
+                <div key={reportIdx} className="mb-6 p-4 bg-gray-50 border border-gray-300 rounded-md">
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-bold text-lg">Report {reportIdx + 1}: {report.file.name}</h3>
+                    <button
+                      onClick={() => handleRemoveReport(reportIdx)}
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Fund Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={fundName}
-                    onChange={(e) => setFundName(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Tech Ventures Fund I"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {funds.find(f => f.name.toLowerCase() === fundName.toLowerCase())
-                      ? 'This fund already exists'
-                      : 'A new fund will be created'}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Year *
+                      Fund Name *
                     </label>
                     <input
-                      type="number"
-                      value={year}
-                      onChange={(e) => setYear(parseInt(e.target.value))}
-                      min="2000"
-                      max="2100"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
+                      type="text"
+                      value={report.fundName}
+                      onChange={(e) => handleUpdateReport(reportIdx, 'fundName', e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      placeholder="e.g., Tech Ventures Fund I"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quarter *
-                    </label>
-                    <select
-                      value={quarter}
-                      onChange={(e) => setQuarter(parseInt(e.target.value))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    >
-                      <option value="1">Q1</option>
-                      <option value="2">Q2</option>
-                      <option value="3">Q3</option>
-                      <option value="4">Q4</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Year *
+                      </label>
+                      <input
+                        type="number"
+                        value={report.year}
+                        onChange={(e) => handleUpdateReport(reportIdx, 'year', parseInt(e.target.value))}
+                        min="2000"
+                        max="2100"
+                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Quarter *
+                      </label>
+                      <select
+                        value={report.quarter}
+                        onChange={(e) => handleUpdateReport(reportIdx, 'quarter', parseInt(e.target.value))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      >
+                        <option value="1">Q1</option>
+                        <option value="2">Q2</option>
+                        <option value="3">Q3</option>
+                        <option value="4">Q4</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {editableInvestments.length > 0 ? (
-                <>
-                  <h3 className="text-lg font-semibold mb-4">
-                    Review Investments ({editableInvestments.length})
-                  </h3>
-                  <div className="overflow-x-auto mb-4 max-h-64 overflow-y-auto border rounded">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                          <th className="px-4 py-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {editableInvestments.map(inv => (
-                          <tr key={inv.tempId}>
-                            <td className="px-4 py-2">
-                              <input
-                                type="text"
-                                value={inv.company_name}
-                                onChange={(e) => handleUpdateInvestment(inv.tempId, 'company_name', e.target.value)}
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                              />
-                            </td>
-                            <td className="px-4 py-2">
-                              <input
-                                type="date"
-                                value={inv.investment_date || ''}
-                                onChange={(e) => handleUpdateInvestment(inv.tempId, 'investment_date', e.target.value)}
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                              />
-                            </td>
-                            <td className="px-4 py-2">
-                              <input
-                                type="number"
-                                value={inv.cost}
-                                onChange={(e) => handleUpdateInvestment(inv.tempId, 'cost', parseFloat(e.target.value))}
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                                min="0"
-                                step="0.01"
-                              />
-                            </td>
-                            <td className="px-4 py-2">
-                              <input
-                                type="number"
-                                value={inv.current_value}
-                                onChange={(e) => handleUpdateInvestment(inv.tempId, 'current_value', parseFloat(e.target.value))}
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                                min="0"
-                                step="0.01"
-                              />
-                            </td>
-                            <td className="px-4 py-2">
-                              <button
-                                onClick={() => handleRemoveInvestment(inv.tempId)}
-                                className="text-red-600 hover:text-red-800 text-sm"
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-                  <p className="text-yellow-800 text-sm">
-                    No investments were automatically extracted. You can add them manually after saving the quarter.
-                  </p>
+                  {report.investments.length > 0 ? (
+                    <>
+                      <h4 className="text-sm font-semibold mb-2">
+                        Investments ({report.investments.length})
+                      </h4>
+                      <div className="overflow-x-auto max-h-48 overflow-y-auto border rounded">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-100 sticky top-0">
+                            <tr>
+                              <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Company</th>
+                              <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Date</th>
+                              <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Cost</th>
+                              <th className="px-2 py-1 text-left text-xs font-medium text-gray-500">Value</th>
+                              <th className="px-2 py-1"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {report.investments.map(inv => (
+                              <tr key={inv.tempId}>
+                                <td className="px-2 py-1">
+                                  <input
+                                    type="text"
+                                    value={inv.company_name}
+                                    onChange={(e) => handleUpdateInvestment(reportIdx, inv.tempId, 'company_name', e.target.value)}
+                                    className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs"
+                                  />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input
+                                    type="date"
+                                    value={inv.investment_date || ''}
+                                    onChange={(e) => handleUpdateInvestment(reportIdx, inv.tempId, 'investment_date', e.target.value)}
+                                    className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs"
+                                  />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input
+                                    type="number"
+                                    value={inv.cost}
+                                    onChange={(e) => handleUpdateInvestment(reportIdx, inv.tempId, 'cost', parseFloat(e.target.value))}
+                                    className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs"
+                                    min="0"
+                                    step="0.01"
+                                  />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input
+                                    type="number"
+                                    value={inv.current_value}
+                                    onChange={(e) => handleUpdateInvestment(reportIdx, inv.tempId, 'current_value', parseFloat(e.target.value))}
+                                    className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs"
+                                    min="0"
+                                    step="0.01"
+                                  />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <button
+                                    onClick={() => handleRemoveInvestment(reportIdx, inv.tempId)}
+                                    className="text-red-600 hover:text-red-800 text-xs"
+                                  >
+                                    ×
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                      No investments extracted
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
 
               <div className="flex gap-2 justify-end">
                 <button
-                  onClick={() => setStep(1)}
+                  onClick={() => { setStep(1); setAnalyzedReports([]); setFiles([]); }}
                   className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >
                   Back
@@ -373,7 +431,7 @@ function PDFUpload({ onClose }) {
                   onClick={handleConfirmAndSave}
                   className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                 >
-                  Confirm & Save
+                  Save All ({analyzedReports.length} Reports)
                 </button>
               </div>
             </div>
